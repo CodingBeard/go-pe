@@ -6,7 +6,6 @@ import (
 
 	"github.com/Velocidex/ordereddict"
 	"github.com/alecthomas/assert"
-	"github.com/sebdah/goldie/v2"
 )
 
 func TestForwarder(t *testing.T) {

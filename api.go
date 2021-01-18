@@ -32,13 +32,13 @@ type FileHeader struct {
 type PEFile struct {
 	mu sync.Mutex
 
-	nt_header *IMAGE_NT_HEADERS
+	NtHeader *IMAGE_NT_HEADERS
 
 	// Used to resolve RVA to file offsets.
-	rva_resolver *RVAResolver
+	RvaResolver *RVAResolver
 
 	// The file offset to the resource section.
-	resource_base int64
+	ResourceBase int64
 
 	FileHeader FileHeader `json:"FileHeader"`
 	GUIDAge    string     `json:"GUIDAge"`
@@ -51,8 +51,8 @@ type PEFile struct {
 }
 
 func (self *PEFile) VersionInformation() *ordereddict.Dict {
-	return GetVersionInformation(self.nt_header, self.rva_resolver,
-		self.resource_base)
+	return GetVersionInformation(self.NtHeader, self.RvaResolver,
+		self.ResourceBase)
 }
 
 // Delay calculating these until absolutely necessary.
@@ -61,7 +61,7 @@ func (self *PEFile) Imports() []string {
 	defer self.mu.Unlock()
 
 	if self.imports == nil {
-		self.imports = GetImports(self.nt_header, self.rva_resolver)
+		self.imports = GetImports(self.NtHeader, self.RvaResolver)
 	}
 	return self.imports
 }
@@ -75,9 +75,9 @@ func (self *PEFile) Exports() []string {
 		self.forwards = []string{}
 		self.exports = []string{}
 
-		export_desc := self.nt_header.ExportDirectory(self.rva_resolver)
+		export_desc := self.NtHeader.ExportDirectory(self.RvaResolver)
 		if export_desc != nil {
-			for _, desc := range self.nt_header.ExportTable(self.rva_resolver) {
+			for _, desc := range self.NtHeader.ExportTable(self.RvaResolver) {
 				if desc.Forwarder != "" {
 					self.forwards = append(self.forwards, desc.Forwarder)
 				} else if desc.Name == "" {
@@ -140,16 +140,16 @@ func (self *PEFile) ImpHash() string {
 }
 
 func (self *PEFile) GetMessages() []*Message {
-	resource_section := self.nt_header.SectionByName(".rsrc")
+	resource_section := self.NtHeader.SectionByName(".rsrc")
 	if resource_section != nil {
 		resource_base := int64(resource_section.PointerToRawData())
-		for _, entry := range self.nt_header.ResourceDirectory(
-			self.rva_resolver).Entries() {
+		for _, entry := range self.NtHeader.ResourceDirectory(
+			self.RvaResolver).Entries() {
 			if entry.NameString(resource_base) == "RT_MESSAGETABLE" {
 				for _, child := range entry.Traverse(resource_base) {
 					// Rebase the reader on the resource.
 					reader := io.NewSectionReader(child.Reader,
-						int64(self.rva_resolver.GetFileAddress(
+						int64(self.RvaResolver.GetFileAddress(
 							child.OffsetToData())),
 						int64(child.DataSize()))
 
@@ -222,9 +222,9 @@ func NewPEFile(reader io.ReaderAt) (*PEFile, error) {
 	rsds := nt_header.RSDS(rva_resolver)
 
 	result := &PEFile{
-		nt_header:     nt_header,
-		rva_resolver:  rva_resolver,
-		resource_base: resource_base,
+		NtHeader:     nt_header,
+		RvaResolver:  rva_resolver,
+		ResourceBase: resource_base,
 		FileHeader: FileHeader{
 			Machine:          file_header.Machine().Name,
 			TimeDateStamp:    file_header.TimeDateStamp().String(),
